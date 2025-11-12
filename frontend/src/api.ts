@@ -1,4 +1,4 @@
-export const API_BASE = (typeof import !== 'undefined' && (import.meta as any)?.env?.VITE_API_BASE) || (window as any).API_BASE || 'http://127.0.0.1:8000';
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000';
 
 export interface Appliance { id: number; name: string; cleaning_interval_days: number | null; created_at: string; }
 export interface Task { id: number; appliance_id: number; due_date: string; completed: boolean; completed_at: string | null; }
@@ -36,7 +36,7 @@ export function bulkDelete(ids: number[]): Promise<{ deleted: number }> {
   }));
 }
 export function listTasks(applianceId: number): Promise<Task[]> {
-  return json<Task[]>(fetch(`${API_BASE}/api/appliances/${applianceId}/tasks`));
+  return json<Task>(fetch(`${API_BASE}/api/appliances/${applianceId}/tasks`));
 }
 export function completeTask(taskId: number): Promise<Task> {
   return json<Task>(fetch(`${API_BASE}/api/tasks/${taskId}`, {

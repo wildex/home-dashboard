@@ -38,25 +38,57 @@ class AppMeta(Base):
 
 # Helper scheduling logic used after appliance creation or task completion
 async def ensure_future_task(session, appliance: Appliance) -> CleaningTask | None:
-    """Ensure there is one upcoming incomplete task for the appliance."""
+    """Ensure there is one upcoming incomplete task for the appliance.
+
+    Previous logic could produce a new task with the same due_date if the base date
+    calculation matched an existing task's due date (e.g., rapid re-completion or
+    overlapping scheduling). We now compute the next due date strictly after any
+    existing task due dates or the last completion date.
+    """
     if not appliance.cleaning_interval_days:
         return None
     from sqlalchemy import select
-    result = await session.execute(select(CleaningTask).where(CleaningTask.appliance_id == appliance.id, CleaningTask.completed == False).order_by(CleaningTask.due_date))  # noqa: E712
-    existing = result.scalars().all()
+    # Gather all incomplete tasks ordered by due date
+    result = await session.execute(
+        select(CleaningTask).where(
+            CleaningTask.appliance_id == appliance.id,
+            CleaningTask.completed == False  # noqa: E712
+        ).order_by(CleaningTask.due_date)
+    )
+    incomplete = result.scalars().all()
     today = date.today()
-    # Remove tasks in past that are incomplete? Keep them for display.
-    future_incomplete = [t for t in existing if t.due_date >= today]
+    # If there is a future (>= today) incomplete task, reuse it
+    future_incomplete = [t for t in incomplete if t.due_date >= today]
     if future_incomplete:
         return future_incomplete[0]
-    # Determine base date
-    last_completed_result = await session.execute(select(CleaningTask).where(CleaningTask.appliance_id == appliance.id, CleaningTask.completed == True).order_by(CleaningTask.completed_at.desc()))  # noqa: E712
+
+    # Determine a monotonically increasing base date
+    last_completed_result = await session.execute(
+        select(CleaningTask).where(
+            CleaningTask.appliance_id == appliance.id,
+            CleaningTask.completed == True  # noqa: E712
+        ).order_by(CleaningTask.completed_at.desc())
+    )
     last_completed = last_completed_result.scalars().first()
+
+    # Consider latest due date of any task (completed or not) to avoid duplicates
+    any_tasks_result = await session.execute(
+        select(CleaningTask).where(CleaningTask.appliance_id == appliance.id).order_by(CleaningTask.due_date.desc())
+    )
+    latest_task = any_tasks_result.scalars().first()
+
+    candidates: list[date] = []
     if last_completed and last_completed.completed_at:
-        base_date = last_completed.completed_at.date()
-    else:
-        base_date = appliance.created_at.date()
+        candidates.append(last_completed.completed_at.date())
+    if latest_task:
+        candidates.append(latest_task.due_date)
+    if not candidates:
+        candidates.append(appliance.created_at.date())
+
+    base_date = max(candidates)
+    # Next due must be strictly after base_date
     due = base_date + timedelta(days=appliance.cleaning_interval_days)
+
     new_task = CleaningTask(appliance_id=appliance.id, due_date=due)
     session.add(new_task)
     await session.flush()

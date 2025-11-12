@@ -76,7 +76,7 @@ async def list_due_tasks(session: AsyncSession):
     stmt = select(models.CleaningTask).options(selectinload(models.CleaningTask.appliance)).where(models.CleaningTask.completed == False).order_by(models.CleaningTask.due_date)  # noqa: E712
     result = await session.execute(stmt)
     tasks = result.scalars().all()
-    return [t for t in tasks if t.due_date <= today]
+    return [t for t in tasks if t.due_date <= today + timedelta(days=2)]
 
 async def add_temperature(session: AsyncSession, value_c: float, room: str | None):
     reading = models.TemperatureReading(value_c=value_c, room=room or "default")

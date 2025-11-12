@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     yield
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Home Dashboard API", lifespan=lifespan)
+    app = FastAPI(title="API Домашньої панелі", lifespan=lifespan)
 
     # CORS for React dev
     app.add_middleware(

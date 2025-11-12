@@ -9,6 +9,8 @@ async def test_temperature_rooms_and_clear():
     await init_db()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # ensure clean slate
+        await client.delete('/api/temperature/')
         # Add readings for two rooms
         await client.post('/api/temperature/', json={'value_c': 20.1, 'room': 'living'})
         await client.post('/api/temperature/', json={'value_c': 21.4, 'room': 'living'})
@@ -36,4 +38,3 @@ async def test_temperature_rooms_and_clear():
         data3 = resp3.json()
         # office removed
         assert 'office' not in data3['recent_temps_by_room']
-
